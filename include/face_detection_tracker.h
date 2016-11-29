@@ -71,7 +71,7 @@ public:
 
 private:
     // Global variables.
-    static bool m_newImage_static;
+
     static bool m_newBB_static;
 
     // The ros node handle.

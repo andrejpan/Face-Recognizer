@@ -1,8 +1,6 @@
 #include "face_detection_tracker.h"
-#include <sensor_msgs/JointState.h>
 
 // Initialize static members.
-bool FaceDetectionTracker::m_newImage_static = false;
 bool FaceDetectionTracker::m_newBB_static = false;
 
 /**
@@ -18,8 +16,6 @@ FaceDetectionTracker::FaceDetectionTracker() :
     // Subscribe to input video feed and publish output video feed.
     m_imageSub = m_it.subscribe("/pseye_camera/image_raw", 1, &FaceDetectionTracker::imageCallback, this);
 
-    // Advertise the rectangle with information about the detected face.
-    // not used for now m_perceptPub = m_node.advertise<perception_msgs::Rect>("/face_detection/bb", 1);
 
     // Load the cascades.
     // // Frontal face.
@@ -85,14 +81,13 @@ void FaceDetectionTracker::imageCallback(const sensor_msgs::ImageConstPtr &msg)
     {
         // ROS_INFO("Captured a frame!");
         detectAndDisplay(m_cvPtr->image);
+        // We can always track when we have new image.
+        track();
     }
     else
     {
         ROS_INFO("No captured frame!");
     }
-
-    // Signal new image.
-    m_newImage_static = true;
 }
 
 /**
@@ -106,13 +101,14 @@ void FaceDetectionTracker::detectAndDisplay(cv::Mat frame)
     Mat frameGray;
 
     cv::cvtColor(frame, frameGray, CV_BGR2GRAY);
-    cv::equalizeHist(frameGray, frameGray);
+    //cv::equalizeHist(frameGray, frameGray);
 
     // Detect faces.
     //m_frontalfaceCascade.detectMultiScale(frameGray, faces, 1.1, 2, 0 | CV_HAAR_SCALE_IMAGE, Size(30, 30));
     m_frontalfaceCascade.detectMultiScale(frameGray, faces, 1.3, 3 );
 
-    for( size_t i = 0; i < faces.size(); i++ )
+    //for( size_t i = 0; i < faces.size(); i++ )
+    if (faces.size() > 0)
     {
         // Center point
         // cv::Point center(faces[i].x + faces[i].width * 0.5, faces[i].y + faces[i].height * 0.5);
@@ -150,94 +146,80 @@ void FaceDetectionTracker::detectAndDisplay(cv::Mat frame)
  */
 void FaceDetectionTracker::track()
 {
-    // If we have a new image.
-    if (m_newImage_static)
+
+    // If new bounding box arrived (detected face) && we are not yet tracking anything.
+    if (m_newBB_static && !tracking)
     {
-        // Resize the image.
-        // Done in detecting part.
-        // cv::resize(m_cvPtr->image, img, cv::Size(m_cvPtr->image.cols / 2, m_cvPtr->image.rows / 2));
+        ROS_INFO("New bounding box!");
+        // Create new tracker!
+        cKCF = new cf_tracking::KcfTracker(m_paras);
+        ROS_INFO("After bounding box!");
+        // Save the incoming bounding box to a private member.
+        bb.x = m_p1.x; // m_inBb.x;
+        bb.y = m_p1.y; // m_inBb.y;
+        bb.height = m_height; // m_inBb.height;
+        bb.width = m_width; //m_inBb.width;
 
-        // If new bounding box arrived (detected face) && we are not yet tracking anything.
-        if (m_newBB_static && !tracking)
+        // Reinitialize the tracker.
+        if (cKCF->reinit(m_cvPtr->image, bb)) // KcfTracker->reinit(cv::Mat, cv::Rect)
         {
-            ROS_INFO("New bounding box!");
-            // Create new tracker!
-            cKCF = new cf_tracking::KcfTracker(m_paras);
-
-            // Save the incoming bounding box to a private member.
-            bb.x = m_p1.x; // m_inBb.x;
-            bb.y = m_p1.y; // m_inBb.y;
-            bb.height = m_height; // m_inBb.height;
-            bb.width = m_width; //m_inBb.width;
-
-            // Reinitialize the tracker.
-            if (cKCF->reinit(m_cvPtr->image, bb)) // KcfTracker->reinit(cv::Mat, cv::Rect)
-            {
-                // This means that it is correctly initalized.
-                tracking = true;
-                targetOnFrame = true;
-            }
-            else
-            {
-                // The tracker initialization has failed.
-                delete cKCF;
-                tracking = false;
-                targetOnFrame = false;
-            }
+            // This means that it is correctly initalized.
+            tracking = true;
+            targetOnFrame = true;
         }
-
-        // If the target is on frame.
-        if (targetOnFrame)
+        else
         {
-            // Save the incoming bounding box to a private member.
-            bb.x = m_p1.x; // m_inBb.x;
-            bb.y = m_p2.y; // m_inBb.y;
-            bb.width = m_width; // m_inBb.width;
-            bb.height = m_height; // m_inBb.height;
-
-            // Update the current tracker (if we have one)!
-            targetOnFrame = cKCF->update(m_cvPtr->image, bb); //vKCF[i]->update(img, bb); // KcfTracker->reinit(cv::Mat, cv::Rect)
-
-            // If the tracking has been lost or the bounding box is out of limits.
-            if (!targetOnFrame)
-            {
-                // We are not tracking anymore.
-                delete cKCF;
-                tracking = false;
-            }
+            // The tracker initialization has failed.
+            delete cKCF;
+            tracking = false;
+            targetOnFrame = false;
         }
+    }
 
-        // If we are tracking, then publish the bounding box.
-        if (tracking)
+    // If the target is on frame.
+    if (targetOnFrame)
+    {
+        // Update the current tracker (if we have one)!
+        targetOnFrame = cKCF->update(m_cvPtr->image, bb); 
+
+        // If the tracking has been lost or the bounding box is out of limits.
+        if (!targetOnFrame)
         {
-            m_outBb.x = bb.x;
-            m_outBb.y = bb.y;
-            m_outBb.width = bb.width;
-            m_outBb.height = bb.height;
-
-            bbPub.publish(m_outBb);
+            // We are not tracking anymore.
+            delete cKCF;
+            tracking = false;
         }
+    }
+
+    // If we are tracking, then publish the bounding box.
+    if (tracking)
+    {
+        m_outBb.x = bb.x;
+        m_outBb.y = bb.y;
+        m_outBb.width = bb.width;
+        m_outBb.height = bb.height;
+
+        bbPub.publish(m_outBb);
+    }
 
 
 #ifdef DEBUG // Enable/Disable in the header.
-        cv::Mat out_img;
-        cv::cvtColor(m_cvPtr->image, out_img, CV_BGR2GRAY);// Convert to gray scale
-        cv::cvtColor(out_img, out_img, CV_GRAY2BGR); //Convert from 1 color channel to 3 (trick)
+    cv::Mat out_img;
+    cv::cvtColor(m_cvPtr->image, out_img, CV_BGR2GRAY);// Convert to gray scale
+    cv::cvtColor(out_img, out_img, CV_GRAY2BGR); //Convert from 1 color channel to 3 (trick)
 
-        //Draw a rectangle on the out_img using the tracked bounding box.
-        if (targetOnFrame)
-        {
-            cv::rectangle(out_img, cv::Point(bb.x, bb.y), cv::Point(bb.x + bb.width, bb.y + bb.height), cv::Scalar(0, 255, 255));
-        }
-        std::string box_text = format("# tracked = %d", -1);
-        cv::putText(out_img, box_text, Point(10, 10), FONT_HERSHEY_PLAIN, 1.0, CV_RGB(0,255,0), 2.0);
+    //Draw a rectangle on the out_img using the tracked bounding box.
+    if (targetOnFrame)
+    {
+        cv::rectangle(out_img, cv::Point(bb.x, bb.y), cv::Point(bb.x + bb.width, bb.y + bb.height), cv::Scalar(0, 255, 255));
+    }
+    std::string box_text = format("# tracked = %d", -1);
+    cv::putText(out_img, box_text, Point(10, 10), FONT_HERSHEY_PLAIN, 1.0, CV_RGB(0,255,0), 2.0);
 
-        cv::imshow(m_windowName0, out_img);
-        cv::waitKey(1);
+    cv::imshow(m_windowName0, out_img);
+    cv::waitKey(3);
 #endif
 
-        // Signal that the image and bounding box are not new.
-        m_newImage_static = false;
-        m_newBB_static = false;
-    } //end if new image
+    // Signal that the image and bounding box are not new.
+    m_newBB_static = false;
 }

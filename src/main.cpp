@@ -12,8 +12,8 @@ int main(int argc, char** argv)
     while (ros::ok())
     {
         ros::spinOnce();
-
-        fd.track();
+        // we are running tracker when we have new image
+        //fd.track();
     }
 
     return 0;
