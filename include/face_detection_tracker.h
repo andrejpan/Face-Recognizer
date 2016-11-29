@@ -1,18 +1,3 @@
-/**
- * FILENAME:    face_detection_tracker.h
- *
- * DESCRIPTION:
- *
- * This file includes the definition of the FaceDetectionTracker class.
- * This class firstly converts the sensor_msgs::Image to cv::Mat, then
- * it detects the faces in the given image and tracks the faces.
- *
- *
- * AUTHOR:  maetulj
- *
- * START DATE: 28.11.2016
- *
- */
 #ifndef FACE_DETECTION_TRACKER_H
 #define FACE_DETECTION_TRACKER_H
 
@@ -92,8 +77,9 @@ private:
     // The ros node handle.
     ros::NodeHandle m_node;
 
-    std::string m_windowName{"Face detection"};
-    std::string m_directory{"/home/maetulj/tiago_ws/src/face_detection_tracker/"};
+    std::string m_windowName{"Face detector"};
+    std::string m_windowName0{"Tracked object"};
+    std::string m_directory{"/work/pangerca/catkin_ws/src/face_detection_tracker/"};
 
     // Buffer for publishers, subscibers.
     int m_queuesize = 2;
@@ -181,19 +167,6 @@ private:
     // If the tracker is on frame.
     bool targetOnFrame = false;
 
-    /**
-     * @brief      Callback function for gettint sensor image.
-     *
-     * @param[in]  _img  The image
-     */
-    void callbackimage(const sensor_msgs::ImageConstPtr &_img);
-
-    /**
-     * @brief      Callback for perception rectangle.
-     *
-     * @param[in]  _bb   Bounding box.
-     */
-    void callbackbb(const perception_msgs::RectConstPtr &_bb);
 };
 
 #endif // FACE_DETECTION_TRACKER_H

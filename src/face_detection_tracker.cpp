@@ -16,10 +16,10 @@ FaceDetectionTracker::FaceDetectionTracker() :
     ///////////////////////
 
     // Subscribe to input video feed and publish output video feed.
-    m_imageSub = m_it.subscribe("/kinect2/qhd/image_color_rect", 1, &FaceDetectionTracker::imageCallback, this);
+    m_imageSub = m_it.subscribe("/pseye_camera/image_raw", 1, &FaceDetectionTracker::imageCallback, this);
 
     // Advertise the rectangle with information about the detected face.
-    m_perceptPub = m_node.advertise<perception_msgs::Rect>("/face_detection/bb", 1);
+    // not used for now m_perceptPub = m_node.advertise<perception_msgs::Rect>("/face_detection/bb", 1);
 
     // Load the cascades.
     // // Frontal face.
@@ -40,10 +40,6 @@ FaceDetectionTracker::FaceDetectionTracker() :
     /////////////////////
     /// Tracker part. ///
     /////////////////////
-
-    // rgbimgSub = m_node.subscribe<sensor_msgs::Image>("kinect2/qhd/image_color_rect", m_queuesize, &FaceDetectionTracker::callbackimage, this);
-
-    // bbSub = m_node.subscribe<perception_msgs::Rect>("face_detection/bb", m_queuesize, &FaceDetectionTracker::callbackbb, this);
 
     bbPub = m_node.advertise<perception_msgs::Rect>("tracker/bb", m_queuesize);
 
@@ -76,7 +72,7 @@ void FaceDetectionTracker::imageCallback(const sensor_msgs::ImageConstPtr &msg)
         m_cvPtr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
 
         // Resize the image to half its size.
-        cv::resize(m_cvPtr->image, m_cvPtr->image, cv::Size(m_cvPtr->image.cols / 2, m_cvPtr->image.rows / 2));
+        //cv::resize(m_cvPtr->image, m_cvPtr->image, cv::Size(m_cvPtr->image.cols / 2, m_cvPtr->image.rows / 2));
     }
     catch (cv_bridge::Exception& e)
     {
@@ -95,9 +91,6 @@ void FaceDetectionTracker::imageCallback(const sensor_msgs::ImageConstPtr &msg)
         ROS_INFO("No captured frame!");
     }
 
-    // Output modified video stream.
-    // m_imagePub.publish(m_cvPtr->toImageMsg());
-    //
     // Signal new image.
     m_newImage_static = true;
 }
@@ -116,10 +109,8 @@ void FaceDetectionTracker::detectAndDisplay(cv::Mat frame)
     cv::equalizeHist(frameGray, frameGray);
 
     // Detect faces.
-    m_frontalfaceCascade.detectMultiScale(frameGray, faces, 1.1, 2, 0 | CV_HAAR_SCALE_IMAGE, Size(30, 30));
-
-    // Problems with profile face?
-    // m_profilefaceCascade.detectMultiScale(frameGray, faces, 1.1, 2, 0 | CV_HAAR_SCALE_IMAGE, Size(30, 30));
+    //m_frontalfaceCascade.detectMultiScale(frameGray, faces, 1.1, 2, 0 | CV_HAAR_SCALE_IMAGE, Size(30, 30));
+    m_frontalfaceCascade.detectMultiScale(frameGray, faces, 1.3, 3 );
 
     for( size_t i = 0; i < faces.size(); i++ )
     {
@@ -135,23 +126,8 @@ void FaceDetectionTracker::detectAndDisplay(cv::Mat frame)
         m_width = faces[i].width;
         m_height = faces[i].height;
 
-        /*
-        cv::ellipse(frame, center, Size( faces[i].width * 0.5, faces[i].height * 0.5), 0, 0, 360, Scalar(255, 0, 255), 4, 8, 0);
-        */
-
         // Draw the rectangle on the frame.
-        cv::rectangle(frame, m_p1, m_p2, Scalar(0, 0, 255), 4, 8, 0);
-
-        // Create the header.
-        m_msgRect.header = m_cvPtr->header;
-        m_msgRect.id = i;
-        m_msgRect.x = faces[i].x;
-        m_msgRect.y = faces[i].y;
-        m_msgRect.height = faces[i].height;
-        m_msgRect.width = faces[i].width;
-
-        // Output perception_msgs.
-        m_perceptPub.publish(m_msgRect);
+        cv::rectangle(frameGray, m_p1, m_p2, Scalar(0, 0, 255), 4, 8, 0);
 
         // Signal a new bounding box.
         m_newBB_static = true;
@@ -159,7 +135,9 @@ void FaceDetectionTracker::detectAndDisplay(cv::Mat frame)
 
 #ifdef DEBUG // Enable/Disable in the header.
     // Visualize the image with the fame.
-    cv::imshow( m_windowName, m_cvPtr->image );
+    std::string box_text = format("# detected = %d", faces.size());
+    cv::putText(frameGray, box_text, Point(10, 30), FONT_HERSHEY_PLAIN, 1.0, CV_RGB(0,255,0), 2.0);
+    cv::imshow( m_windowName, frameGray);
     cv::waitKey(3);
 #endif
 }
@@ -167,34 +145,6 @@ void FaceDetectionTracker::detectAndDisplay(cv::Mat frame)
 /////////////////////
 /// Tracker part. ///
 /////////////////////
-
-/**
- * @brief      Read the camera image.
- *
- * @param[in]  _img  The image
- */
-void FaceDetectionTracker::callbackimage(const sensor_msgs::ImageConstPtr &_img)
-{
-    //TODO
-    //use cv_bridge to copy the data from the sensor message. use the the sensor_msgs::image_encodings to define the type of image.
-    //in_img = ;
-    //newImage = true;
-    m_inImg = cv_bridge::toCvCopy(_img, sensor_msgs::image_encodings::BGR8);
-
-    m_newImage_static = true;
-}
-
-/**
- * @brief      Callback to get the bounding box.
- *
- * @param[in]  _bb   { parameter_description }
- */
-void FaceDetectionTracker::callbackbb(const perception_msgs::RectConstPtr &_bb)
-{
-    m_inBb = perception_msgs::Rect(*_bb);
-    m_newBB_static = true;
-}
-
 /**
  * @brief      Track the face.
  */
@@ -277,19 +227,12 @@ void FaceDetectionTracker::track()
         //Draw a rectangle on the out_img using the tracked bounding box.
         if (targetOnFrame)
         {
-            cv::rectangle(out_img, cv::Point(bb.x, bb.y), cv::Point(bb.x + bb.width, bb.y + bb.height), cv::Scalar(255, 255, 255));
+            cv::rectangle(out_img, cv::Point(bb.x, bb.y), cv::Point(bb.x + bb.width, bb.y + bb.height), cv::Scalar(0, 255, 255));
         }
+        std::string box_text = format("# tracked = %d", -1);
+        cv::putText(out_img, box_text, Point(10, 10), FONT_HERSHEY_PLAIN, 1.0, CV_RGB(0,255,0), 2.0);
 
-        //Draw a circle on the center of the bounding box.
-        if (targetOnFrame)
-        {
-            int centerX = bb.x + (bb.width / 2);
-            int centerY = bb.y + (bb.height / 2);
-
-            cv::circle(out_img, cv::Point(centerX, centerY), 2, cv::Scalar(0, 0, 255));
-        }
-
-        cv::imshow("Tracked object", out_img);
+        cv::imshow(m_windowName0, out_img);
         cv::waitKey(1);
 #endif
 
