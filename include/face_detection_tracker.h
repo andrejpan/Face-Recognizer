@@ -127,6 +127,11 @@ private:
     int m_width;
     int m_height;
 
+    // detecting frontal or profile
+    int faceMethod;
+    // we are skiping frames for detection, cpu-s are less overloaded
+    int skipFrames;
+
     //////////////////////
     /// Tracking part. ///
     //////////////////////
@@ -166,6 +171,12 @@ private:
 
     // If the tracker is on frame.
     bool targetOnFrame = false;
+
+    // break tracker after every 2 second
+    ros::Duration timeout;
+
+    ros::Time start_time;
+
 
 };
 
