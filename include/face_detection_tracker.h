@@ -91,10 +91,10 @@ private:
     // Helper member variables for image transformation.
     image_transport::ImageTransport m_it;
     image_transport::Subscriber m_imageSub;
-    image_transport::Publisher m_imagePub;
+    //image_transport::Publisher m_imagePub;
 
     // Publisher.
-    ros::Publisher m_perceptPub;
+    //ros::Publisher m_perceptPub;
 
     // POinter to the cv image.
     cv_bridge::CvImagePtr m_cvPtr;
@@ -108,7 +108,7 @@ private:
     cv::CascadeClassifier m_profilefaceCascade;
 
     // Variable to hold the detection rectangle.
-    perception_msgs::Rect m_msgRect;
+    //perception_msgs::Rect m_msgRect;
 
     /**
      * @brief      Callback for the sensor_msgs::Image.
@@ -127,9 +127,10 @@ private:
     int m_width;
     int m_height;
 
-    // detecting frontal or profile
+    // detecting frontal or profile face
     int faceMethod;
     // we are skiping frames for detection, cpu-s are less overloaded
+    #define SKIP_FRAMES 15
     int skipFrames;
 
     //////////////////////
@@ -139,21 +140,21 @@ private:
     // Cv Bridge variables for transforming sensor_msgs::Image into cv::Mat
     cv_bridge::CvImagePtr m_inImg;
 
-    perception_msgs::Rect m_inBb;
+    //perception_msgs::Rect m_inBb;
     perception_msgs::Rect m_outBb;
 
     // local variables
-    cv::Mat img;
+    //cv::Mat img;
     cv::Rect bb;
 
     // Detected face number to track.
     int i = 0;
 
     // Declare and initialize subscribers, rgb image and the 2D region to track.
-    ros::Subscriber rgbimgSub;
+    //ros::Subscriber rgbimgSub;
 
     // Face detection subscriber.
-    ros::Subscriber bbSub;
+    //ros::Subscriber bbSub;
 
     //Declare and initialize publishers, 2D region tracked region.
     ros::Publisher bbPub;
@@ -161,7 +162,7 @@ private:
     // Tracker parameters.
     cf_tracking::KcfParameters m_paras;
 
-    std::vector<cf_tracking::KcfTracker*> vKCF;
+    //std::vector<cf_tracking::KcfTracker*> vKCF;
 
     // Declare tracker.
     cf_tracking::KcfTracker *cKCF;
@@ -172,7 +173,7 @@ private:
     // If the tracker is on frame.
     bool targetOnFrame = false;
 
-    // break tracker after every 2 second
+    // for reseting a tracker, not implemented yet
     ros::Duration timeout;
 
     ros::Time start_time;

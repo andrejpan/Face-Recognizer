@@ -3,11 +3,8 @@
 // Initialize static members.
 bool FaceDetectionTracker::m_newBB_static = false;
 
-/**
- * @brief      Constructor for the class.
- */
 FaceDetectionTracker::FaceDetectionTracker() :
-        m_it(m_node)
+    m_it(m_node)
 {
     ///////////////////////
     /// Detection part. ///
@@ -37,7 +34,6 @@ FaceDetectionTracker::FaceDetectionTracker() :
     /// Tracker part. ///
     /////////////////////
 
-
     bbPub = m_node.advertise<perception_msgs::Rect>("tracker/bb", m_queuesize);
 
     m_paras.enableTrackingLossDetection = true;
@@ -49,24 +45,16 @@ FaceDetectionTracker::FaceDetectionTracker() :
 
 }
 
+FaceDetectionTracker::~FaceDetectionTracker()
+{}
+
 ///////////////////////
 /// Detection part. ///
 ///////////////////////
 
-/**
- * @brief      Destructor.
- */
-FaceDetectionTracker::~FaceDetectionTracker()
-{}
-
-/**
- * @brief      Callback for the sensor_msgs::Image.
- *
- * @param[in]  msg   The image in a form of a sensor_msgs::Image.
- */
 void FaceDetectionTracker::imageCallback(const sensor_msgs::ImageConstPtr &msg)
 {
-    // Try to convert the message to cv image.
+    // Convert the message to cv image.
     try
     {
         m_cvPtr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
@@ -83,7 +71,7 @@ void FaceDetectionTracker::imageCallback(const sensor_msgs::ImageConstPtr &msg)
     // Apply the classifiers to the frame.
     if(m_cvPtr)
     {
-        // ROS_INFO("Captured a frame!");
+        // detection part
         detectAndDisplay(m_cvPtr->image);
         // We can always track when we have new image.
         track();
@@ -94,11 +82,7 @@ void FaceDetectionTracker::imageCallback(const sensor_msgs::ImageConstPtr &msg)
     }
 }
 
-/**
- * @brief      Function for detecting and displaying the faces.
- *
- * @param[in]  frame  The frame
- */
+
 void FaceDetectionTracker::detectAndDisplay(cv::Mat frame)
 {
     std::vector<Rect> faces;
@@ -107,7 +91,6 @@ void FaceDetectionTracker::detectAndDisplay(cv::Mat frame)
     cv::cvtColor(frame, frameGray, CV_BGR2GRAY);
     //cv::equalizeHist(frameGray, frameGray);
 
-    // Detect faces.
     faceMethod = 0;
 
     if (skipFrames < 0 )
@@ -117,6 +100,7 @@ void FaceDetectionTracker::detectAndDisplay(cv::Mat frame)
         {
             faceMethod = 1;
         }
+        /*
         if (faces.size() == 0)
         {
             m_profilefaceCascade.detectMultiScale(frameGray, faces, 1.3, 3 );
@@ -124,10 +108,12 @@ void FaceDetectionTracker::detectAndDisplay(cv::Mat frame)
             {
                 faceMethod = 2;
             }
-        }
+        }*/
         if (faces.size() > 0)
         {
-            skipFrames = 15;
+            // face was just deteced on a picture, skipping next SKIP_FRAMES pictures
+            // for CPU optimization   
+            skipFrames = SKIP_FRAMES;
         }
         else
         {
@@ -138,13 +124,12 @@ void FaceDetectionTracker::detectAndDisplay(cv::Mat frame)
     {
         skipFrames--;
     }
+
     //ROS_INFO("%d ", faceMethod);
     //for( size_t i = 0; i < faces.size(); i++ )
+    i=0;
     if (faces.size() > 0)
     {
-        // Center point
-        // cv::Point center(faces[i].x + faces[i].width * 0.5, faces[i].y + faces[i].height * 0.5);
-
         // Point in the upper left corner.
         m_p1 = cv::Point(faces[i].x, faces[i].y);
 
@@ -163,24 +148,25 @@ void FaceDetectionTracker::detectAndDisplay(cv::Mat frame)
     // we should not edit the frame, because it is poiter
     frame.copyTo(out_img);
     // Visualize the image with the fame.
-    std::string box_text = format("# detected = %d", faces.size());
     
     switch(faceMethod)
     {
         case 2:
         { 
-            cv::putText(out_img, box_text, Point(10, 30), FONT_HERSHEY_PLAIN, 1.0, CV_RGB(0,255,0), 2.0); 
+            std::string box_text = format("# profiles = %d", faces.size());
+            cv::putText(out_img, box_text, Point(10, 10), FONT_HERSHEY_PLAIN, 1.0, CV_RGB(0,255,0), 2.0); 
             cv::rectangle(out_img, m_p1, m_p2, CV_RGB(0, 255, 0), 4, 8, 0);
             break;
         }
         case 1:
         {
-            cv::putText(out_img, box_text, Point(10, 30), FONT_HERSHEY_PLAIN, 1.0, CV_RGB(255,255,0), 2.0);   
+            std::string box_text = format("# frontal = %d", faces.size());
+            cv::putText(out_img, box_text, Point(10, 10), FONT_HERSHEY_PLAIN, 1.0, CV_RGB(255,255,0), 2.0);   
             cv::rectangle(out_img, m_p1, m_p2, CV_RGB(255, 255, 0), 4, 8, 0);
         } 
     }
     cv::imshow( m_windowName, out_img);
-    cv::waitKey(3);
+    cv::waitKey(33);
 #endif
 }
 
@@ -200,10 +186,10 @@ void FaceDetectionTracker::track()
         // Create new tracker!
         cKCF = new cf_tracking::KcfTracker(m_paras);
         // Save the incoming bounding box to a private member.
-        bb.x = m_p1.x; // m_inBb.x;
-        bb.y = m_p1.y; // m_inBb.y;
-        bb.height = m_height; // m_inBb.height;
-        bb.width = m_width; //m_inBb.width;
+        bb.x = m_p1.x; 
+        bb.y = m_p1.y; 
+        bb.height = m_height; 
+        bb.width = m_width; 
 
         // Reinitialize the tracker.
         if (cKCF->reinit(m_cvPtr->image, bb)) // KcfTracker->reinit(cv::Mat, cv::Rect)
@@ -226,10 +212,10 @@ void FaceDetectionTracker::track()
     // If the target is on frame.
     if (targetOnFrame)
     {
-        bb.x = m_p1.x;
+        /*bb.x = m_p1.x;
         bb.y = m_p2.y; 
         bb.width = m_width; 
-        bb.height = m_height; 
+        bb.height = m_height;*/ 
         // Update the current tracker (if we have one)!
         targetOnFrame = cKCF->update(m_cvPtr->image, bb); 
         // If the tracking has been lost or the bounding box is out of limits.
@@ -255,7 +241,6 @@ void FaceDetectionTracker::track()
         m_outBb.y = bb.y;
         m_outBb.width = bb.width;
         m_outBb.height = bb.height;
-
         bbPub.publish(m_outBb);
     }
 
