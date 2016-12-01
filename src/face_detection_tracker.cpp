@@ -43,6 +43,11 @@ FaceDetectionTracker::FaceDetectionTracker() :
 
     timeout = ros::Duration(2);
 
+    // for adding faces to vector
+    num_images = 0;
+    //model = createFisherFaceRecognizer();
+    model = createEigenFaceRecognizer();
+    min_frame_size.x = 4000; min_frame_size.y = 4000;  
 }
 
 FaceDetectionTracker::~FaceDetectionTracker()
@@ -141,6 +146,95 @@ void FaceDetectionTracker::detectAndDisplay(cv::Mat frame)
 
         // Signal a new bounding box.
         m_newBB_static = true;
+
+        // add faces to the list
+        if (num_images < VEC_SIZE)
+        {
+            cv::Rect R(m_p1, m_p2); //Create a rect 
+            images.push_back(frame(R));
+            labels.push_back(0);
+            num_images++;
+            //ROS_INFO("Vector size %d", num_images);
+            //ROS_INFO("Frame size [%d, %d]", m_height, m_width);
+            if (min_frame_size.x > m_width)
+                min_frame_size.x = m_width;
+            if (min_frame_size.y > m_height)
+                min_frame_size.y = m_height;
+        }
+        if (num_images == VEC_SIZE)
+        {
+            // pictures need to be resized to the same size
+            ROS_INFO("Min frame size [%d, %d]", min_frame_size.y, min_frame_size.x);
+            int tmpi = 0;
+            for (std::vector<cv::Mat>::iterator it = images.begin() ; it != images.end(); ++it)
+            {
+                //cv::Mat tmpMat = *it;
+                cv::resize(*it, *it, cv::Size(min_frame_size.x, min_frame_size.y));
+                cv::cvtColor(*it, *it, CV_BGR2GRAY);
+                //ROS_INFO("%d", it->rows);
+                ROS_INFO("frames size [%d, %d], dim %d", it->rows, it->cols, it->dims);
+                //imshow(format("pic %d", tmpi), *it);
+                tmpi++;
+            }
+
+            ros::Time tic = ros::Time::now();
+            ROS_INFO("before training step");
+            model->train(images, labels);
+            ros::Time toc = ros::Time::now();
+            ROS_INFO("Time lasted for training %f", (toc-tic).toSec() );
+
+            // avoiding running training step again
+            num_images++;
+
+            // Here is how to get the eigenvalues of this Eigenfaces model:
+            cv::Mat eigenvalues = model->getMat("eigenvalues");
+            // And we can do the same to display the Eigenvectors (read Eigenfaces):
+            cv::Mat W = model->getMat("eigenvectors");
+            // Get the sample mean from the training data
+            cv::Mat mean = model->getMat("mean");
+
+            imshow("mean", norm_0_255(mean.reshape(1, images[0].rows)));
+            // Display or save the Eigenfaces:
+            for (int i = 0; i < min(10, W.cols); i++)
+            {
+                string msg = format("Eigenvalue #%d = %.5f", i, eigenvalues.at<double>(i));
+                std::cout << msg << std::endl;
+                // get eigenvector #i
+                Mat ev = W.col(i).clone();
+                // Reshape to original size & normalize to [0...255] for imshow.
+                Mat grayscale = norm_0_255(ev.reshape(1,  min_frame_size.x));
+                // Show the image & apply a Jet colormap for better sensing.
+                Mat cgrayscale;
+                cv::applyColorMap(grayscale, cgrayscale, COLORMAP_JET);
+                // Display or save:
+                imshow(format("eigenface_%d", i), cgrayscale);
+            }
+            // Display or save the image reconstruction at some predefined steps:
+            ROS_INFO("W size [%d, %d]", W.cols, W.rows);
+            for(int num_components = min(W.cols, 10); num_components < min(W.cols, 300); num_components+=15)
+            {
+                // slice the eigenvectors from the model
+                Mat evs = Mat(W, Range::all(), Range(0, num_components));
+                Mat projection = subspaceProject(evs, mean, images[0].reshape(1,1));
+                Mat reconstruction = subspaceReconstruct(evs, mean, projection);
+                // Normalize the result:
+                reconstruction = norm_0_255(reconstruction.reshape(1, images[0].rows));
+                // Display or save:
+                imshow(format("eigenface_reconstruction_%d", num_components), reconstruction);
+            }
+
+        }
+
+        if(num_images > VEC_SIZE)
+        {
+            cv::Rect R(m_p1, m_p2); 
+            cv::Mat tmpMat;
+            cv::resize(frame(R), tmpMat, cv::Size(min_frame_size.x, min_frame_size.y));
+            cv::cvtColor(tmpMat, tmpMat, CV_BGR2GRAY);
+            //ROS_INFO("just loaded frames size [%d, %d], dim %d", tmpMat.rows, tmpMat.cols, tmpMat.dims);
+            int predictedLabel = model->predict(tmpMat);
+            ROS_INFO("Predicted class = %d / Actual class = %d.", predictedLabel, 0);
+        }
     }
 
 #ifdef DEBUG // Enable/Disable in the header.
@@ -264,4 +358,23 @@ void FaceDetectionTracker::track()
 
     // Signal that the image and bounding box are not new.
     m_newBB_static = false;
+}
+
+
+Mat FaceDetectionTracker::norm_0_255(InputArray _src) {
+    Mat src = _src.getMat();
+    // Create and return normalized image:
+    Mat dst;
+    switch(src.channels()) {
+    case 1:
+        cv::normalize(_src, dst, 0, 255, NORM_MINMAX, CV_8UC1);
+        break;
+    case 3:
+        cv::normalize(_src, dst, 0, 255, NORM_MINMAX, CV_8UC3);
+        break;
+    default:
+        src.copyTo(dst);
+        break;
+    }
+    return dst;
 }

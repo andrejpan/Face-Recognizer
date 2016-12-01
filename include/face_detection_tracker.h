@@ -175,10 +175,23 @@ private:
 
     // for reseting a tracker, not implemented yet
     ros::Duration timeout;
-
     ros::Time start_time;
 
+    // part for fisherfaces
+    // These vectors hold the images and corresponding labels.
+    vector<Mat> images;
+    vector<int> labels;
+    // how many images
+    int num_images;
+    #define VEC_SIZE 20
+    
+    //model needs to have a face frames with the same size
+    cv::Point min_frame_size;
 
+    // Eigenfaces model
+    Ptr<FaceRecognizer> model;
+
+    Mat norm_0_255(InputArray _src);
 };
 
 #endif // FACE_DETECTION_TRACKER_H
