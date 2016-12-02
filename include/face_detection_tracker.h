@@ -28,10 +28,8 @@
 #include "../cf_libs/kcf/kcf_tracker.hpp"
 #include <perception_msgs/Rect.h>
 
-
 //opening saved images on hard drive
 #include<dirent.h>
-
 
 // Debug defines.
 // Include this if you want to have visual output.
@@ -80,7 +78,7 @@ private:
 
     std::string m_windowName{"Face detector"};
     std::string m_windowName0{"Tracked object"};
-    std::string m_directory{"/work/pangerca/catkin_ws/src/face_detection_tracker/"};
+    std::string m_directory; //{"/work/pangerca/catkin_ws/src/face_detection_tracker/"};
 
     // Buffer for publishers, subscibers.
     int m_queuesize = 2;
@@ -124,9 +122,10 @@ private:
 
     // detecting frontal or profile face
     int faceMethod;
-    // we are skiping frames for detection, cpu-s are less overloaded
-    #define SKIP_FRAMES 15
-    int skipFrames;
+    // skiping frames at detection part -> less overloaded cpu-s
+    int SKIP_FRAMES;
+    // counter for frames
+    int skipFramesCounter;
 
     //////////////////////
     /// Tracking part. ///
@@ -140,9 +139,6 @@ private:
     // local variables
     //cv::Mat img;
     cv::Rect bb;
-
-    // Detected face number to track.
-    int i = 0;
 
     std::map<int, std::string> my_map;
 
@@ -173,12 +169,16 @@ private:
     // new person, new number
     vector<int> labels;
 
+    // history of people who were detected last LIST_SIZE times
     #define LIST_SIZE 10
-    int myints[LIST_SIZE];
+    int history_ints[LIST_SIZE];
     int index_list;
 
-    //TODO
-    int myMaxIndex;
+    // variable is used for graphisc of the tracker
+    int indexOfPerson;
+
+    //number of people that are in date base.
+    int numberOfPeople;
 
     // size of images
     cv::Point pic_size;
@@ -193,7 +193,8 @@ private:
     bool readImages(std::string person, int tag);
 
     // location of database images
-    std::string dirName{"/work/pangerca/faces_ics/"};
+    std::string dirName;
+    // for reading images
     DIR *dir;
     struct dirent *ent;
 };

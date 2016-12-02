@@ -1,0 +1,6 @@
+# location of images for making a model
+path_to_images: '/work/pangerca/faces_ics/'
+# location of haarcascade xml files
+m_directory: '/work/pangerca/catkin_ws/src/face_detection_tracker/'
+# skiping frames at detection part -> less overloaded cpu-s
+SKIP_FRAMES: 15

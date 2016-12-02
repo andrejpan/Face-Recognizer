@@ -15,6 +15,9 @@ FaceDetectionTracker::FaceDetectionTracker() :
 
 
     // Load the cascades.
+    //get location of haarcascade xml files
+    m_node.getParam("/face_recognizer/m_directory", m_directory);
+
     // // Frontal face.
     if(!m_frontalfaceCascade.load(m_directory + m_frontalFaceCascadeName))
     {
@@ -28,13 +31,18 @@ FaceDetectionTracker::FaceDetectionTracker() :
         ROS_ERROR("Error loading profile face cascade!");
         return;
     }
-    skipFrames = 0;
+    skipFramesCounter = 0;
 
     /////////////////////
     /// Tracker part. ///
     /////////////////////
 
     bbPub = m_node.advertise<perception_msgs::Rect>("tracker/bb", m_queuesize);
+
+    // get param for images location
+    m_node.getParam("/face_recognizer/path_to_images", dirName);
+
+    m_node.getParam("face_recognizer/SKIP_FRAMES", SKIP_FRAMES);
 
     m_paras.enableTrackingLossDetection = true;
     // paras.psrThreshold = 10; // lower more flexible
@@ -44,7 +52,7 @@ FaceDetectionTracker::FaceDetectionTracker() :
     timeout = ros::Duration(2);
 
     model = createFisherFaceRecognizer();
-    //model = createEigenFaceRecognizer();
+    //model = createEigenFaceRecognizer(); // did not tested yet
 
     // size of images should be positive
     pic_size.x = -1; pic_size.y = -1;
@@ -53,6 +61,8 @@ FaceDetectionTracker::FaceDetectionTracker() :
     readImages("person1/",2); //Bjoern
     readImages("person2/",3); //Hidu
     readImages("person3/",4); //Neda
+
+    numberOfPeople = 4 + 1;
 
     my_map = {
         {0, "unknown" },
@@ -63,9 +73,10 @@ FaceDetectionTracker::FaceDetectionTracker() :
     };
     ROS_INFO("Done reading face images, training the model now");
 
-    //TODO
+    // tracker will show the name of person which was detected most LIST_SIZE times
+    // in the past
     index_list = 0;
-    std::fill_n(myints, LIST_SIZE, -1);
+    std::fill_n(history_ints, LIST_SIZE, -1);
 
     ros::Time tic = ros::Time::now();
     model->train(images, labels);
@@ -121,7 +132,7 @@ void FaceDetectionTracker::detectAndDisplay(cv::Mat frame)
 
     faceMethod = 0;
 
-    if (skipFrames < 0 )
+    if (skipFramesCounter < 0 )
     {
         m_frontalfaceCascade.detectMultiScale(frameGray, faces, 1.3, 3 );
         if (faces.size() > 0)
@@ -141,61 +152,58 @@ void FaceDetectionTracker::detectAndDisplay(cv::Mat frame)
         {
             // face was just deteced on a picture, skipping next SKIP_FRAMES pictures
             // for CPU optimization   
-            skipFrames = SKIP_FRAMES;
+            skipFramesCounter = SKIP_FRAMES;
         }
         else
         {
-            skipFrames--;
+            skipFramesCounter--;
         }    
     }
     else
     {
-        skipFrames--;
+        skipFramesCounter--;
     }
 
-    //ROS_INFO("%d ", faceMethod);
-    //for( size_t i = 0; i < faces.size(); i++ )
-    i=0;
+
     if (faces.size() > 0)
     {
         // Point in the upper left corner.
-        m_p1 = cv::Point(faces[i].x, faces[i].y);
+        m_p1 = cv::Point(faces[0].x, faces[0].y);
 
         // Point in the lower right corner.
-        m_p2 = cv::Point(faces[i].x + faces[i].width, faces[i].y + faces[i].height);
+        m_p2 = cv::Point(faces[0].x + faces[0].width, faces[0].y + faces[0].height);
 
-        m_width = faces[i].width;
-        m_height = faces[i].height;
+        m_width = faces[0].width;
+        m_height = faces[0].height;
 
         // Signal a new bounding box.
         m_newBB_static = true;
 
         cv::Rect R(m_p1, m_p2);
         cv::Mat tmpMat;
-        //ROS_INFO("1 [%d, %d], dim %d", frameGray.rows, frameGray.cols, frameGray.dims);
-        cv::resize(frameGray(R), tmpMat, cv::Size(100,100));  //TODO get size from Database
-        //ROS_INFO("2 [%d, %d], dim %d", tmpMat.rows, tmpMat.cols, tmpMat.dims);
+        cv::resize(frameGray(R), tmpMat, cv::Size(pic_size.x,pic_size.y));
         int predictedLabel = model->predict(tmpMat);
         //ROS_INFO("Name %s", my_map[predictedLabel].c_str());
-        myints[index_list] = predictedLabel;
+        history_ints[index_list] = predictedLabel;
         index_list = (index_list + 1) % LIST_SIZE;
 
-        //find most frequent element
-        int tmpListFreq[] = {0,0,0,0,0};
+        //find most frequent person in last LIST_SIZE iterations
+        // TODO fix this part
+        int tmpListFreq[numberOfPeople];
+        std::fill_n(tmpListFreq, sizeof(tmpListFreq)/sizeof(*tmpListFreq), 0);
         for (int j=0; j < LIST_SIZE; j++)
         {
-            tmpListFreq[myints[j]]++;
+            tmpListFreq[history_ints[j]]++;
         }
-        int myMax = -1; myMaxIndex = -1;
-        for (int j=0; j < 5; j++)
+        int myMax = -1; indexOfPerson = -1;
+        for (int j=0; j < sizeof(tmpListFreq)/sizeof(*tmpListFreq); j++)
         {
             if (myMax < tmpListFreq[j] )
             {
                 myMax = tmpListFreq[j];
-                myMaxIndex = j;
+                indexOfPerson = j;
             }
         }
-        //ROS_INFO("Global names %d %s", myMaxIndex, my_map[myMaxIndex].c_str());
 
 
 #ifdef DEBUG // Enable/Disable in the header.
@@ -248,7 +256,7 @@ void FaceDetectionTracker::track()
         bb.width = m_width; 
 
         // Reinitialize the tracker.
-        if (cKCF->reinit(m_cvPtr->image, bb)) // KcfTracker->reinit(cv::Mat, cv::Rect)
+        if (cKCF->reinit(m_cvPtr->image, bb))
         {
             // This means that it is correctly initalized.
             tracking = true;
@@ -261,17 +269,13 @@ void FaceDetectionTracker::track()
             delete cKCF;
             tracking = false;
             targetOnFrame = false;
-            skipFrames = -1;
+            skipFramesCounter = -1;
         }
     }
 
     // If the target is on frame.
     if (targetOnFrame)
     {
-        /*bb.x = m_p1.x;
-        bb.y = m_p2.y; 
-        bb.width = m_width; 
-        bb.height = m_height;*/ 
         // Update the current tracker (if we have one)!
         targetOnFrame = cKCF->update(m_cvPtr->image, bb); 
         // If the tracking has been lost or the bounding box is out of limits.
@@ -285,9 +289,8 @@ void FaceDetectionTracker::track()
     
     if (ros::Time::now() - start_time > timeout) 
     {
-            //ROS_INFO("Just reseted****************************************************");
             start_time = ros::Time::now();
-            // we need to implement reseting the window without a long delay.
+            // we need to implement reseting the window without a some delay.
     }
 
     // If we are tracking, then publish the bounding box.
@@ -310,10 +313,8 @@ void FaceDetectionTracker::track()
     if (targetOnFrame)
     {
         cv::rectangle(out_img, cv::Point(bb.x, bb.y), cv::Point(bb.x + bb.width, bb.y + bb.height), CV_RGB(255, 0, 0));
-        cv::putText(out_img, my_map[myMaxIndex].c_str(), cv::Point(bb.x+10, bb.y+20), FONT_HERSHEY_PLAIN, 1.0, CV_RGB(255,0,0), 1.0);
+        cv::putText(out_img, my_map[indexOfPerson].c_str(), cv::Point(bb.x+10, bb.y+20), FONT_HERSHEY_PLAIN, 1.0, CV_RGB(255,0,0), 1.0);
     }
-    //std::string box_text = format("# tracked = %d", -1);
-    //cv::putText(out_img, box_text, Point(10, 10), FONT_HERSHEY_PLAIN, 1.0, CV_RGB(255,0,0), 2.0);
 
     cv::imshow(m_windowName0, out_img);
     cv::waitKey(3);
@@ -344,8 +345,8 @@ Mat FaceDetectionTracker::norm_0_255(InputArray _src) {
 bool  FaceDetectionTracker::readImages(std::string person, int tag)
 {
     std::string dirNameTmp = dirName;
+    // TODO update the code, that will go through folders in given path
     dirNameTmp.append(person);
-    //ROS_INFO("Directory: %s, %s",dirName.c_str(), dirNameTmp.c_str());
     dir = opendir( dirNameTmp.c_str() );
     while ((ent = readdir (dir)) != NULL)
     {
@@ -366,7 +367,7 @@ bool  FaceDetectionTracker::readImages(std::string person, int tag)
                 ROS_ERROR("Images are not the same size, program will die.");
                 return false;
             }
-            images.push_back(imread(imgPath, 0)); //load grayscale images
+            images.push_back(imread(imgPath, 0)); //0 - load grayscale images
             labels.push_back(tag);
         }
     }
