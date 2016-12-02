@@ -221,9 +221,9 @@ target_link_libraries(KCFtracker
 
 ## Declare a C++ library
 add_library(face_detection_tracker_library src/face_detection_tracker.cpp)
-
+add_library(extract_images_library src/extract_images.cpp)
 ## Specify libraries to link a library or executable target against
-target_link_libraries(face_detection_tracker_library ${roscpp_LIBRARIES} ${catkin_LIBRARIES} KCFtracker)
+#target_link_libraries(face_detection_tracker_library ${roscpp_LIBRARIES} ${catkin_LIBRARIES} KCFtracker)
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above
@@ -235,7 +235,14 @@ target_link_libraries(face_detection_tracker_library ${roscpp_LIBRARIES} ${catki
 # )
 
 add_executable(face_detection_tracker src/main.cpp)
-target_link_libraries(face_detection_tracker face_detection_tracker_library ${catkin_LIBRARIES} ${OpenCV_LIBRARIES} KCFtracker)
+add_executable(extract_images src/main1.cpp)
+
+target_link_libraries(extract_images extract_images_library
+    ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
+
+target_link_libraries(face_detection_tracker face_detection_tracker_library
+    ${catkin_LIBRARIES} ${OpenCV_LIBRARIES} KCFtracker)
+
 
 #############
 ## Install ##
@@ -272,7 +279,7 @@ target_link_libraries(face_detection_tracker face_detection_tracker_library ${ca
 #   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 # )
 
-install(TARGETS KCFtracker face_detection_tracker
+install(TARGETS KCFtracker face_detection_tracker extract_images
 #   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

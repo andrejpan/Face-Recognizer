@@ -1,11 +1,10 @@
-#include "face_detection_tracker.h"
+#include "extract_images.h"
 
 int main(int argc, char** argv)
 {
-    ros::init(argc, argv, "face_detection_tracker");
+    ros::init(argc, argv, "face_detection_and_save_pictures");
 
-    /** @face_detection_tracker */
-    FaceDetectionTracker fd;
+    FaceDetectionSave fdt;
 
     ROS_INFO("initialized the class");
 

@@ -43,11 +43,34 @@ FaceDetectionTracker::FaceDetectionTracker() :
 
     timeout = ros::Duration(2);
 
-    // for adding faces to vector
-    num_images = 0;
-    //model = createFisherFaceRecognizer();
-    model = createEigenFaceRecognizer();
-    min_frame_size.x = 4000; min_frame_size.y = 4000;  
+    model = createFisherFaceRecognizer();
+    //model = createEigenFaceRecognizer();
+
+    // size of images should be positive
+    pic_size.x = -1; pic_size.y = -1;
+
+    readImages("person0/",1); //Andrej
+    readImages("person1/",2); //Bjoern
+    readImages("person2/",3); //Hidu
+    readImages("person3/",4); //Neda
+
+    my_map = {
+        {0, "unknown" },
+        {1, "Andrej" },
+        {2, "Bjoern" },
+        {3, "Hidu" },
+        {4, "Neda" }
+    };
+    ROS_INFO("Done reading face images, training the model now");
+
+    //TODO
+    index_list = 0;
+    std::fill_n(myints, LIST_SIZE, -1);
+
+    ros::Time tic = ros::Time::now();
+    model->train(images, labels);
+    ros::Time toc = ros::Time::now();
+    ROS_INFO("Time of training was %.2fs", (toc-tic).toSec() );
 }
 
 FaceDetectionTracker::~FaceDetectionTracker()
@@ -94,7 +117,7 @@ void FaceDetectionTracker::detectAndDisplay(cv::Mat frame)
     Mat frameGray;
 
     cv::cvtColor(frame, frameGray, CV_BGR2GRAY);
-    //cv::equalizeHist(frameGray, frameGray);
+    cv::equalizeHist(frameGray, frameGray);
 
     faceMethod = 0;
 
@@ -147,129 +170,68 @@ void FaceDetectionTracker::detectAndDisplay(cv::Mat frame)
         // Signal a new bounding box.
         m_newBB_static = true;
 
-        // add faces to the list
-        if (num_images < VEC_SIZE)
+        cv::Rect R(m_p1, m_p2);
+        cv::Mat tmpMat;
+        //ROS_INFO("1 [%d, %d], dim %d", frameGray.rows, frameGray.cols, frameGray.dims);
+        cv::resize(frameGray(R), tmpMat, cv::Size(100,100));  //TODO get size from Database
+        //ROS_INFO("2 [%d, %d], dim %d", tmpMat.rows, tmpMat.cols, tmpMat.dims);
+        int predictedLabel = model->predict(tmpMat);
+        //ROS_INFO("Name %s", my_map[predictedLabel].c_str());
+        myints[index_list] = predictedLabel;
+        index_list = (index_list + 1) % LIST_SIZE;
+
+        //find most frequent element
+        int tmpListFreq[] = {0,0,0,0,0};
+        for (int j=0; j < LIST_SIZE; j++)
         {
-            cv::Rect R(m_p1, m_p2); //Create a rect 
-            images.push_back(frame(R));
-            labels.push_back(0);
-            num_images++;
-            //ROS_INFO("Vector size %d", num_images);
-            //ROS_INFO("Frame size [%d, %d]", m_height, m_width);
-            if (min_frame_size.x > m_width)
-                min_frame_size.x = m_width;
-            if (min_frame_size.y > m_height)
-                min_frame_size.y = m_height;
+            tmpListFreq[myints[j]]++;
         }
-        if (num_images == VEC_SIZE)
+        int myMax = -1; myMaxIndex = -1;
+        for (int j=0; j < 5; j++)
         {
-            // pictures need to be resized to the same size
-            ROS_INFO("Min frame size [%d, %d]", min_frame_size.y, min_frame_size.x);
-            int tmpi = 0;
-            for (std::vector<cv::Mat>::iterator it = images.begin() ; it != images.end(); ++it)
+            if (myMax < tmpListFreq[j] )
             {
-                //cv::Mat tmpMat = *it;
-                cv::resize(*it, *it, cv::Size(min_frame_size.x, min_frame_size.y));
-                cv::cvtColor(*it, *it, CV_BGR2GRAY);
-                //ROS_INFO("%d", it->rows);
-                ROS_INFO("frames size [%d, %d], dim %d", it->rows, it->cols, it->dims);
-                //imshow(format("pic %d", tmpi), *it);
-                tmpi++;
+                myMax = tmpListFreq[j];
+                myMaxIndex = j;
             }
-
-            ros::Time tic = ros::Time::now();
-            ROS_INFO("before training step");
-            model->train(images, labels);
-            ros::Time toc = ros::Time::now();
-            ROS_INFO("Time lasted for training %f", (toc-tic).toSec() );
-
-            // avoiding running training step again
-            num_images++;
-
-            // Here is how to get the eigenvalues of this Eigenfaces model:
-            cv::Mat eigenvalues = model->getMat("eigenvalues");
-            // And we can do the same to display the Eigenvectors (read Eigenfaces):
-            cv::Mat W = model->getMat("eigenvectors");
-            // Get the sample mean from the training data
-            cv::Mat mean = model->getMat("mean");
-
-            imshow("mean", norm_0_255(mean.reshape(1, images[0].rows)));
-            // Display or save the Eigenfaces:
-            for (int i = 0; i < min(10, W.cols); i++)
-            {
-                string msg = format("Eigenvalue #%d = %.5f", i, eigenvalues.at<double>(i));
-                std::cout << msg << std::endl;
-                // get eigenvector #i
-                Mat ev = W.col(i).clone();
-                // Reshape to original size & normalize to [0...255] for imshow.
-                Mat grayscale = norm_0_255(ev.reshape(1,  min_frame_size.x));
-                // Show the image & apply a Jet colormap for better sensing.
-                Mat cgrayscale;
-                cv::applyColorMap(grayscale, cgrayscale, COLORMAP_JET);
-                // Display or save:
-                imshow(format("eigenface_%d", i), cgrayscale);
-            }
-            // Display or save the image reconstruction at some predefined steps:
-            ROS_INFO("W size [%d, %d]", W.cols, W.rows);
-            for(int num_components = min(W.cols, 10); num_components < min(W.cols, 300); num_components+=15)
-            {
-                // slice the eigenvectors from the model
-                Mat evs = Mat(W, Range::all(), Range(0, num_components));
-                Mat projection = subspaceProject(evs, mean, images[0].reshape(1,1));
-                Mat reconstruction = subspaceReconstruct(evs, mean, projection);
-                // Normalize the result:
-                reconstruction = norm_0_255(reconstruction.reshape(1, images[0].rows));
-                // Display or save:
-                imshow(format("eigenface_reconstruction_%d", num_components), reconstruction);
-            }
-
         }
+        //ROS_INFO("Global names %d %s", myMaxIndex, my_map[myMaxIndex].c_str());
 
-        if(num_images > VEC_SIZE)
-        {
-            cv::Rect R(m_p1, m_p2); 
-            cv::Mat tmpMat;
-            cv::resize(frame(R), tmpMat, cv::Size(min_frame_size.x, min_frame_size.y));
-            cv::cvtColor(tmpMat, tmpMat, CV_BGR2GRAY);
-            //ROS_INFO("just loaded frames size [%d, %d], dim %d", tmpMat.rows, tmpMat.cols, tmpMat.dims);
-            int predictedLabel = model->predict(tmpMat);
-            ROS_INFO("Predicted class = %d / Actual class = %d.", predictedLabel, 0);
-        }
-    }
 
 #ifdef DEBUG // Enable/Disable in the header.
-    cv::Mat out_img;
-    // we should not edit the frame, because it is poiter
-    frame.copyTo(out_img);
-    // Visualize the image with the fame.
-    
-    switch(faceMethod)
-    {
-        case 2:
-        { 
-            std::string box_text = format("# profiles = %d", faces.size());
-            cv::putText(out_img, box_text, Point(10, 10), FONT_HERSHEY_PLAIN, 1.0, CV_RGB(0,255,0), 2.0); 
-            cv::rectangle(out_img, m_p1, m_p2, CV_RGB(0, 255, 0), 4, 8, 0);
-            break;
-        }
-        case 1:
+        cv::Mat out_img;
+        // we should not edit the frame, because it is poiter
+        frame.copyTo(out_img);
+        // Visualize the image with the fame.
+
+        switch(faceMethod)
         {
-            std::string box_text = format("# frontal = %d", faces.size());
-            cv::putText(out_img, box_text, Point(10, 10), FONT_HERSHEY_PLAIN, 1.0, CV_RGB(255,255,0), 2.0);   
-            cv::rectangle(out_img, m_p1, m_p2, CV_RGB(255, 255, 0), 4, 8, 0);
-        } 
-    }
-    cv::imshow( m_windowName, out_img);
-    cv::waitKey(33);
+            case 2:
+            {
+                std::string box_text = format("# profiles = %d", faces.size());
+                cv::putText(out_img, box_text, Point(10, 10), FONT_HERSHEY_PLAIN, 1.0, CV_RGB(0,255,0), 2.0);
+                cv::putText(out_img, my_map[predictedLabel].c_str(), m_p1, FONT_HERSHEY_PLAIN, 1.0, CV_RGB(0,255,0), 1.0);
+                cv::rectangle(out_img, m_p1, m_p2, CV_RGB(0, 255, 0), 4, 8, 0);
+                break;
+            }
+            case 1:
+            {
+                std::string box_text = format("# frontal = %d", faces.size());
+                cv::putText(out_img, box_text, Point(10, 10), FONT_HERSHEY_PLAIN, 1.0, CV_RGB(255,255,0), 2.0);
+                cv::putText(out_img, my_map[predictedLabel].c_str(), cv::Point(m_p1.x+10, m_p1.y+20), FONT_HERSHEY_PLAIN, 1.0, CV_RGB(255,255,0), 1.0);
+
+                cv::rectangle(out_img, m_p1, m_p2, CV_RGB(255, 255, 0), 4, 8, 0);
+            }
+        }
+        cv::imshow( m_windowName, out_img);
+        cv::waitKey(33);
 #endif
+    }
 }
 
 /////////////////////
 /// Tracker part. ///
 /////////////////////
-/**
- * @brief      Track the face.
- */
 void FaceDetectionTracker::track()
 {
 
@@ -348,9 +310,10 @@ void FaceDetectionTracker::track()
     if (targetOnFrame)
     {
         cv::rectangle(out_img, cv::Point(bb.x, bb.y), cv::Point(bb.x + bb.width, bb.y + bb.height), CV_RGB(255, 0, 0));
+        cv::putText(out_img, my_map[myMaxIndex].c_str(), cv::Point(bb.x+10, bb.y+20), FONT_HERSHEY_PLAIN, 1.0, CV_RGB(255,0,0), 1.0);
     }
-    std::string box_text = format("# tracked = %d", -1);
-    cv::putText(out_img, box_text, Point(10, 10), FONT_HERSHEY_PLAIN, 1.0, CV_RGB(255,0,0), 2.0);
+    //std::string box_text = format("# tracked = %d", -1);
+    //cv::putText(out_img, box_text, Point(10, 10), FONT_HERSHEY_PLAIN, 1.0, CV_RGB(255,0,0), 2.0);
 
     cv::imshow(m_windowName0, out_img);
     cv::waitKey(3);
@@ -377,4 +340,35 @@ Mat FaceDetectionTracker::norm_0_255(InputArray _src) {
         break;
     }
     return dst;
+}
+bool  FaceDetectionTracker::readImages(std::string person, int tag)
+{
+    std::string dirNameTmp = dirName;
+    dirNameTmp.append(person);
+    //ROS_INFO("Directory: %s, %s",dirName.c_str(), dirNameTmp.c_str());
+    dir = opendir( dirNameTmp.c_str() );
+    while ((ent = readdir (dir)) != NULL)
+    {
+        // . and .. needs to be rejected
+        std::string tmpDots = ent->d_name;
+        if(tmpDots.compare(".")!= 0 && tmpDots.compare("..")!= 0)
+        {
+            std::string imgPath(dirNameTmp + tmpDots);
+            Mat tmpImg = imread(imgPath);
+            if ((tmpImg.rows > 0 && tmpImg.cols > 0) && (pic_size.x == -1 && pic_size.y == -1) )
+            {
+                pic_size.x = tmpImg.cols;
+                pic_size.y = tmpImg.rows;
+                ROS_INFO("Size of face images [y: %d, x: %d]", pic_size.y, pic_size.x);
+            }
+            if ( (tmpImg.cols != pic_size.x) || (tmpImg.rows != pic_size.y) )
+            {
+                ROS_ERROR("Images are not the same size, program will die.");
+                return false;
+            }
+            images.push_back(imread(imgPath, 0)); //load grayscale images
+            labels.push_back(tag);
+        }
+    }
+    return true;
 }

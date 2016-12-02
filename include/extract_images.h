@@ -1,5 +1,5 @@
-#ifndef FACE_DETECTION_TRACKER_H
-#define FACE_DETECTION_TRACKER_H
+#ifndef FACE_DETECTION_SAVE_H
+#define FACE_DETECTION_SAVE_H
 
 
 //C++ related includes.
@@ -26,12 +26,6 @@
 
 // Third party includes for tracking.
 #include "../cf_libs/kcf/kcf_tracker.hpp"
-#include <perception_msgs/Rect.h>
-
-
-//opening saved images on hard drive
-#include<dirent.h>
-
 
 // Debug defines.
 // Include this if you want to have visual output.
@@ -44,19 +38,19 @@ using namespace cv;
 /**
  * @brief      Class for face detection and tracking.
  */
-class FaceDetectionTracker
+class FaceDetectionSave
 {
 public:
 
     /**
      * @brief      Constructor for the class.
      */
-    FaceDetectionTracker();
+    FaceDetectionSave();
 
     /**
      * @brief      Destructor.
      */
-    ~FaceDetectionTracker();
+    ~FaceDetectionSave();
 
     /**
      * @brief      Function for detecting and displaying the faces.
@@ -73,14 +67,14 @@ public:
 private:
     // Global variables.
 
-    static bool m_newBB_static;
+    int i;
 
     // The ros node handle.
     ros::NodeHandle m_node;
 
     std::string m_windowName{"Face detector"};
-    std::string m_windowName0{"Tracked object"};
     std::string m_directory{"/work/pangerca/catkin_ws/src/face_detection_tracker/"};
+    std::string output_folder{"/work/pangerca/faces_ics/tmp/"};
 
     // Buffer for publishers, subscibers.
     int m_queuesize = 2;
@@ -92,7 +86,6 @@ private:
     // Helper member variables for image transformation.
     image_transport::ImageTransport m_it;
     image_transport::Subscriber m_imageSub;
-    //image_transport::Publisher m_imagePub;
 
     // POinter to the cv image.
     cv_bridge::CvImagePtr m_cvPtr;
@@ -125,77 +118,16 @@ private:
     // detecting frontal or profile face
     int faceMethod;
     // we are skiping frames for detection, cpu-s are less overloaded
-    #define SKIP_FRAMES 15
+    #define SKIP_FRAMES 10
     int skipFrames;
 
-    //////////////////////
-    /// Tracking part. ///
-    //////////////////////
+    //Size of frame in pixels, x=y
+    #define FR_SI 100
 
-    // Cv Bridge variables for transforming sensor_msgs::Image into cv::Mat
-    cv_bridge::CvImagePtr m_inImg;
+    // frame which hold the face
+    cv::Mat face_for_save;
 
-    perception_msgs::Rect m_outBb;
-
-    // local variables
-    //cv::Mat img;
-    cv::Rect bb;
-
-    // Detected face number to track.
-    int i = 0;
-
-    std::map<int, std::string> my_map;
-
-    //Declare and initialize publishers, 2D region tracked region.
-    ros::Publisher bbPub;
-
-    // Tracker parameters.
-    cf_tracking::KcfParameters m_paras;
-
-    //std::vector<cf_tracking::KcfTracker*> vKCF;
-
-    // Declare tracker.
-    cf_tracking::KcfTracker *cKCF;
-
-    // The tracker is running.
-    bool tracking = false;
-
-    // If the tracker is on frame.
-    bool targetOnFrame = false;
-
-    // for reseting a tracker, not implemented yet
-    ros::Duration timeout;
-    ros::Time start_time;
-
-    // part for fisherfaces
-    // These vectors hold the images and corresponding labels.
-    vector<Mat> images;
-    // new person, new number
-    vector<int> labels;
-
-    #define LIST_SIZE 10
-    int myints[LIST_SIZE];
-    int index_list;
-
-    //TODO
-    int myMaxIndex;
-
-    // size of images
-    cv::Point pic_size;
-
-    // Eigenfaces model
-    Ptr<FaceRecognizer> model;
-
-    // normalize pixels to byte size
     Mat norm_0_255(InputArray _src);
-
-    //reading database images from folder
-    bool readImages(std::string person, int tag);
-
-    // location of database images
-    std::string dirName{"/work/pangerca/faces_ics/"};
-    DIR *dir;
-    struct dirent *ent;
 };
 
-#endif // FACE_DETECTION_TRACKER_H
+#endif // FACE_DETECTION_SAVE_H
