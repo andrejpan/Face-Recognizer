@@ -4,7 +4,7 @@ Recognizing will work if just one person is on the image. System will have unexp
 
 Package was tested with Ubuntu 14.04, ROS Indigo and OpenCV 2.4
 
-TODO - new video
+Video: https://www.youtube.com/watch?v=3dSMyXtXyfU
 
 ## Brief description.
 - Package subscribes to video topic.
