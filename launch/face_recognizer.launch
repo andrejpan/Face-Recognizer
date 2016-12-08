@@ -2,6 +2,5 @@
 <launch>
   <node name="face_recognizer" pkg="face_detection_tracker" type="face_detection_tracker" output="screen">
      <rosparam command="load" file="$(find face_detection_tracker)/configs/param.yaml" />
-  </node>
- 
+  </node> 
 </launch>

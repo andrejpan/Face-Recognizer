@@ -79,6 +79,7 @@ private:
     std::string m_windowName{"Face detector"};
     std::string m_windowName0{"Tracked object"};
     std::string m_directory; //{"/work/pangerca/catkin_ws/src/face_detection_tracker/"};
+    std::string m_camera_topic;
 
     // Buffer for publishers, subscibers.
     int m_queuesize = 2;

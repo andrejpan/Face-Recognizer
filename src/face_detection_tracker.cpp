@@ -9,16 +9,16 @@ FaceDetectionTracker::FaceDetectionTracker() :
     ///////////////////////
     /// Detection part. ///
     ///////////////////////
-
+    //get camera topic
+    m_node.getParam("/face_recognizer/m_camera_topic", m_camera_topic);
     // Subscribe to input video feed and publish output video feed.
-    m_imageSub = m_it.subscribe("/pseye_camera/image_raw", 1, &FaceDetectionTracker::imageCallback, this);
+    m_imageSub = m_it.subscribe(m_camera_topic, 1, &FaceDetectionTracker::imageCallback, this);
 
-
-    // Load the cascades.
     //get location of haarcascade xml files
     m_node.getParam("/face_recognizer/m_directory", m_directory);
 
-    // // Frontal face.
+    // Load the cascades.
+    // Frontal face.
     if(!m_frontalfaceCascade.load(m_directory + m_frontalFaceCascadeName))
     {
         ROS_ERROR("Error loading frontal face cascade!");
