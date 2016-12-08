@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<launch>
+  <node name="recording_sets" pkg="face_detection_tracker" type="extract_images" output="screen">
+     <rosparam command="load" file="$(find face_detection_tracker)/configs/param.yaml" />
+  </node> 
+</launch>

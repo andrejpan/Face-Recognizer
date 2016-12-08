@@ -1,20 +1,21 @@
 #include "extract_images.h"
 
-
-
-FaceDetectionSave::FaceDetectionSave() :
-    m_it(m_node)
+FaceDetectionSave::FaceDetectionSave() : m_it(m_node)
 {
     ///////////////////////
     /// Detection part. ///
     ///////////////////////
 
+    //get camera topic
+    m_node.getParam("/recording_sets/m_camera_topic", m_camera_topic);
     // Subscribe to input video feed and publish output video feed.
-    m_imageSub = m_it.subscribe("/pseye_camera/image_raw", 1, &FaceDetectionSave::imageCallback, this);
+    m_imageSub = m_it.subscribe(m_camera_topic, 1, &FaceDetectionSave::imageCallback, this);
 
 
+    //get location of haarcascade xml files
+    m_node.getParam("/recording_sets/m_directory", m_directory);
     // Load the cascades.
-    // // Frontal face.
+    // Frontal face.
     if(!m_frontalfaceCascade.load(m_directory + m_frontalFaceCascadeName))
     {
         ROS_ERROR("Error loading frontal face cascade!");
@@ -27,6 +28,7 @@ FaceDetectionSave::FaceDetectionSave() :
         ROS_ERROR("Error loading profile face cascade!");
         return;
     }
+    m_node.getParam("/recording_sets/path_to_images", output_folder);
     skipFrames = 0;
     i=0;
 }
@@ -125,7 +127,7 @@ void FaceDetectionSave::detectAndDisplay(cv::Mat frame)
         cv::Rect R(m_p1, m_p2);
         face_for_save = frameGray(R);
 
-        ROS_INFO("frames size [%d, %d], dim %d", face_for_save.rows, face_for_save.cols, face_for_save.dims);
+        //ROS_INFO("frames size [%d, %d], dim %d", face_for_save.rows, face_for_save.cols, face_for_save.dims);
         cv::resize(face_for_save, face_for_save, cv::Size(FR_SI, FR_SI));
         //cv::cvtColor(frameGray, frameGray, CV_BGR2GRAY);
         imwrite(format("%s/eigenface_%d.png", output_folder.c_str(), i), norm_0_255(face_for_save));

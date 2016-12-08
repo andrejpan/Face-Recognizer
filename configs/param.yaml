@@ -1,3 +1,5 @@
+# camera topic
+m_camera_topic: '/pseye_camera/image_raw'
 # location of images for making a model
 path_to_images: '/work/pangerca/faces_ics/'
 # location of haarcascade xml files

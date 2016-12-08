@@ -1,7 +1,6 @@
 #ifndef FACE_DETECTION_SAVE_H
 #define FACE_DETECTION_SAVE_H
 
-
 //C++ related includes.
 #include <cstdio>
 #include <cmath>
@@ -73,8 +72,9 @@ private:
     ros::NodeHandle m_node;
 
     std::string m_windowName{"Face detector"};
-    std::string m_directory{"/work/pangerca/catkin_ws/src/face_detection_tracker/"};
-    std::string output_folder{"/work/pangerca/faces_ics/tmp/"};
+    std::string m_directory; //{"/work/pangerca/catkin_ws/src/face_detection_tracker/"};
+    std::string output_folder; //{"/work/pangerca/faces_ics/tmp/"};
+    std::string m_camera_topic;
 
     // Buffer for publishers, subscibers.
     int m_queuesize = 2;
@@ -121,7 +121,7 @@ private:
     #define SKIP_FRAMES 10
     int skipFrames;
 
-    //Size of frame in pixels, x=y
+    //Size of face frame in pixels, dim x = dim y
     #define FR_SI 100
 
     // frame which hold the face
